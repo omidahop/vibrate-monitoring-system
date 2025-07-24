@@ -7,8 +7,8 @@ set -e
 
 # Configuration
 PROJECT_NAME="vibrate-monitoring-system"
-DOMAIN="your-domain.com"
-EMAIL="admin@your-domain.com"
+DOMAIN="31.56.205.135"
+EMAIL="ahoopay.omid@gmail.com"
 DB_PASSWORD="$(openssl rand -base64 32)"
 JWT_SECRET="$(openssl rand -base64 64)"
 SUPER_ADMIN_PASSWORD="$(openssl rand -base64 16)"
