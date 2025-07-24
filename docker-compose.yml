@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  # CouchDB Database
+  couchdb:
+    image: couchdb:3.3
+    container_name: vibrate_couchdb
+    restart: always
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:-vibrate_secure_2024}
+      - COUCHDB_SECRET=${COUCHDB_SECRET:-vibrate_cluster_secret_2024}
+    ports:
+      - "5984:5984"
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+      - couchdb_config:/opt/couchdb/etc/local.d
+    networks:
+      - vibrate_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Backend API Server
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vibrate_backend
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - COUCHDB_URL=http://admin:${COUCHDB_PASSWORD:-vibrate_secure_2024}@couchdb:5984
+      - JWT_SECRET=${JWT_SECRET:-vibrate_jwt_secret_change_in_production}
+      - JWT_EXPIRES_IN=7d
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-admin@vibratemonitor.com}
+      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD:-SuperAdmin123!}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    networks:
+      - vibrate_network
+    healthcheck:
+      test: ["CMD", "node", "src/healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Nginx Reverse Proxy & Static File Server
+  nginx:
+    image: nginx:alpine
+    container_name: vibrate_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend/public:/usr/share/nginx/html:ro
+      - ./deployment/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - vibrate_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for session storage and caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: vibrate_redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - vibrate_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Log aggregator (optional)
+  logrotate:
+    image: linkyard/docker-logrotate
+    container_name: vibrate_logrotate
+    restart: always
+    volumes:
+      - ./logs:/logs
+      - ./deployment/logrotate.conf:/logrotate.conf:ro
+    environment:
+      - CRON_SCHEDULE=0 2 * * *
+    networks:
+      - vibrate_network
+
+volumes:
+  couchdb_data:
+    driver: local
+  couchdb_config:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  vibrate_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

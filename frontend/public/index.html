@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2563eb">
+    <title>سیستم ثبت داده‌های ویبره تجهیزات</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="سیستم ثبت و مانیتورینگ داده‌های ویبره تجهیزات صنعتی">
+    <meta name="keywords" content="ویبره، مانیتورینگ، تجهیزات، صنعتی">
+    <meta name="author" content="Vibrate Monitor System">
+    
+    <!-- PWA Links -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    
+    <!-- CSS Files -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/src/css/styles.css">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="/src/js/api.js" as="script">
+    <link rel="preload" href="/src/js/auth.js" as="script">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h2>در حال بارگذاری سیستم...</h2>
+            <p>لطفاً صبر کنید</p>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="auth-screen d-none">
+        <div class="auth-container">
+            <div class="auth-header">
+                <h1>
+                    <i class="fas fa-chart-line"></i>
+                    سیستم ثبت داده‌های ویبره
+                </h1>
+                <p>برای ادامه وارد حساب کاربری خود شوید</p>
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form">
+                <h2>ورود به سیستم</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-envelope"></i>
+                            ایمیل
+                        </label>
+                        <input type="email" class="form-control" id="loginEmail" 
+                               placeholder="ایمیل خود را وارد کنید" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-lock"></i>
+                            رمز عبور
+                        </label>
+                        <div class="password-input">
+                            <input type="password" class="form-control" id="loginPassword" 
+                                   placeholder="رمز عبور خود را وارد کنید" required>
+                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('loginPassword')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        ورود
+                    </button>
+                </form>
+                
+                <div class="auth-switch">
+                    <span>حساب کاربری ندارید؟</span>
+                    <button class="btn-link" onclick="showRegisterForm()">ثبت‌نام کنید</button>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="auth-form d-none">
+                <h2>ثبت‌نام در سیستم</h2>
+                <form onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-user"></i>
+                            نام و نام خانوادگی
+                        </label>
+                        <input type="text" class="form-control" id="registerName" 
+                               placeholder="نام کامل خود را وارد کنید" required minlength="2" maxlength="50">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-envelope"></i>
+                            ایمیل
+                        </label>
+                        <input type="email" class="form-control" id="registerEmail" 
+                               placeholder="ایمیل خود را وارد کنید" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-lock"></i>
+                            رمز عبور
+                        </label>
+                        <div class="password-input">
+                            <input type="password" class="form-control" id="registerPassword" 
+                                   placeholder="رمز عبور را وارد کنید" required minlength="6">
+                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('registerPassword')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <small class="password-hint">
+                            رمز عبور باید شامل حداقل یک حرف بزرگ، یک حرف کوچک و یک عدد باشد
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-user-tag"></i>
+                            نقش کاربری
+                        </label>
+                        <select class="form-control" id="registerRole" required>
+                            <option value="operator">اپراتور تجهیزات</option>
+                            <option value="technician">تکنسین</option>
+                            <option value="engineer">مهندس</option>
+                            <option value="supervisor">سرپرست</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success btn-block" id="registerBtn">
+                        <i class="fas fa-user-plus"></i>
+                        ثبت‌نام
+                    </button>
+                </form>
+                
+                <div class="auth-switch">
+                    <span>قبلاً ثبت‌نام کرده‌اید؟</span>
+                    <button class="btn-link" onclick="showLoginForm()">وارد شوید</button>
+                </div>
+            </div>
+
+            <!-- Approval Pending -->
+            <div id="approvalPending" class="approval-pending d-none">
+                <div class="approval-content">
+                    <i class="fas fa-hourglass-half"></i>
+                    <h2>در انتظار تایید</h2>
+                    <p>حساب کاربری شما با موفقیت ایجاد شد.</p>
+                    <p>لطفاً منتظر تایید حساب توسط مدیر سیستم باشید.</p>
+                    <button class="btn btn-secondary" onclick="showLoginForm()">
+                        <i class="fas fa-arrow-left"></i>
+                        بازگشت به صفحه ورود
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="mainApp" class="d-none">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <i class="fas fa-chart-line"></i>
+                        سیستم ثبت داده‌های ویبره
+                    </div>
+                    
+                    <nav class="nav-tabs" id="mainNavigation">
+                        <!-- Navigation will be populated by JavaScript based on user role -->
+                    </nav>
+                    
+                    <div class="header-actions">
+                        <div class="user-menu">
+                            <button class="user-menu-toggle" onclick="toggleUserMenu()">
+                                <div class="user-avatar" id="userAvatar">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <span id="headerUserName">کاربر</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            
+                            <div class="user-menu-dropdown" id="userMenuDropdown">
+                                <div class="user-menu-header">
+                                    <div class="user-info">
+                                        <div class="user-name" id="menuUserName">کاربر</div>
+                                        <div class="user-role" id="menuUserRole">نقش</div>
+                                    </div>
+                                </div>
+                                <div class="user-menu-items">
+                                    <button class="user-menu-item" onclick="showProfileModal()">
+                                        <i class="fas fa-user-cog"></i>
+                                        پروفایل کاربری
+                                    </button>
+                                    <button class="user-menu-item" onclick="handleLogout()">
+                                        <i class="fas fa-sign-out-alt"></i>
+                                        خروج
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button class="theme-toggle" onclick="toggleTheme()">
+                            <i class="fas fa-moon"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+                <!-- Data Entry Section -->
+                <section id="data-entry" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-edit"></i>
+                                ثبت داده‌های ویبره - روز جاری
+                            </h2>
+                            <div class="current-date-info">
+                                <i class="fas fa-calendar"></i>
+                                <span id="currentDateDisplay">...</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Tab Buttons -->
+                        <div class="tab-buttons">
+                            <button class="tab-btn active" id="newEntryTab" onclick="switchDataEntryMode('new')">
+                                <i class="fas fa-plus"></i>
+                                ثبت جدید
+                            </button>
+                            <button class="tab-btn" id="editEntryTab" onclick="switchDataEntryMode('edit')">
+                                <i class="fas fa-edit"></i>
+                                ویرایش
+                            </button>
+                        </div>
+                        
+                        <!-- New Entry Mode -->
+                        <div id="newEntryMode">
+                            <!-- Unit Selection -->
+                            <div class="form-group">
+                                <label class="form-label">انتخاب واحد:</label>
+                                <div class="grid grid-2">
+                                    <button class="unit-btn dri1" onclick="selectUnit('DRI1')">
+                                        <i class="fas fa-industry"></i>
+                                        واحد احیا مستقیم 1 (DRI 1)
+                                    </button>
+                                    <button class="unit-btn dri2" onclick="selectUnit('DRI2')">
+                                        <i class="fas fa-industry"></i>
+                                        واحد احیا مستقیم 2 (DRI 2)
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Data Entry Interface -->
+                            <div class="data-entry-interface d-none" id="dataEntryInterface">
+                                <!-- Progress and Info -->
+                                <div class="data-entry-header" id="entryHeader">
+                                    <div class="current-unit" id="currentUnit">واحد احیا مستقیم 1</div>
+                                    <div class="current-date" id="currentDate">تاریخ امروز</div>
+                                    <div class="current-equipment" id="currentEquipment">
+                                        <i class="fas fa-cog"></i>
+                                        گیربکس کمپرسور 48A
+                                    </div>
+                                    <div class="current-parameter" id="currentParameter">
+                                        <i class="fas fa-arrow-up"></i>
+                                        سرعت عمودی متصل (V1)
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Data Input Area -->
+                                <div class="data-input-area" id="inputArea">
+                                    <input type="number" class="form-control large" id="dataInput" 
+                                           placeholder="مقدار را وارد کنید..." 
+                                           min="0" step="0.01" 
+                                           aria-label="ورودی داده ویبره">
+                                    <div class="mt-2" id="rangeInfo">
+                                        <small class="text-secondary">حداکثر مقدار: 20 | Enter برای ثبت</small>
+                                    </div>
+                                </div>
+                                
+                                <!-- Controls -->
+                                <div class="d-flex gap-2 justify-center mt-3">
+                                    <button class="btn btn-success" onclick="saveCurrentData()">
+                                        <i class="fas fa-save"></i>
+                                        ذخیره
+                                    </button>
+                                    <button class="btn btn-warning" onclick="resetEntry()">
+                                        <i class="fas fa-refresh"></i>
+                                        شروع مجدد
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Edit Mode -->
+                        <div id="editMode" class="d-none">
+                            <!-- Edit interface will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- View Data Section -->
+                <section id="view-data" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-table"></i>
+                                مشاهده داده‌ها
+                            </h2>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary" onclick="toggleFullscreen('view-data')">
+                                    <i class="fas fa-expand"></i>
+                                    تمام صفحه
+                                </button>
+                                <button class="btn btn-secondary" onclick="printTable()">
+                                    <i class="fas fa-print"></i>
+                                    چاپ
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Filters -->
+                        <div class="grid grid-3 mb-3">
+                            <div class="form-group">
+                                <label class="form-label">واحد:</label>
+                                <select class="form-control" id="viewUnit">
+                                    <option value="">همه واحدها</option>
+                                    <option value="DRI1">DRI 1</option>
+                                    <option value="DRI2">DRI 2</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">تاریخ:</label>
+                                <input type="date" class="form-control" id="viewDate">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">تجهیز:</label>
+                                <select class="form-control" id="viewEquipment">
+                                    <option value="">همه تجهیزات</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Data Tables -->
+                        <div id="dataTablesContainer">
+                            <!-- Tables will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Admin Panel Section -->
+                <section id="admin-panel" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-users-cog"></i>
+                                پنل مدیریت
+                            </h2>
+                        </div>
+                        
+                        <!-- Admin content will be populated by JavaScript -->
+                        <div id="adminContent">
+                            <!-- Admin interface -->
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="profileModal">
+        <!-- Profile modal content -->
+    </div>
+
+    <div class="modal" id="confirmModal">
+        <!-- Confirmation modal content -->
+    </div>
+
+    <!-- Offline notification -->
+    <div id="offlineNotification" class="offline-notification d-none">
+        <div class="offline-content">
+            <i class="fas fa-wifi"></i>
+            <span>اتصال اینترنت قطع است. تغییرات محلی ذخیره می‌شود.</span>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/src/js/utils.js"></script>
+    <script src="/src/js/api.js"></script>
+    <script src="/src/js/auth.js"></script>
+    <script src="/src/js/admin.js"></script>
+    <script src="/src/js/app.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
