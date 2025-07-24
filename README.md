@@ -16,3 +16,5 @@
 - 🔒 **امنیت بالا**: رمزگذاری، HTTPS، حفاظت در برابر حملات
 
 ## 🏗️ معماری سیستم
+
+wget https://raw.githubusercontent.com/omidahop/vibrate-monitoring-system/main/deployment/deploy.sh && chmod +x deploy.sh && ./deploy.sh
