@@ -39,7 +39,7 @@ print_error() {
 }
 
 # Check if running as root
-if ; then
+if [ "$(id -u)" -eq 0 ]; then
    print_error "This script should not be run as root for security reasons"
    exit 1
 fi
