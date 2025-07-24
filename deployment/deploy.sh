@@ -39,11 +39,10 @@ print_error() {
 }
 
 # Check if running as root
-if [ "$(id -u)" -eq 0 ]; then
+if [ "$(whoami)" = "root" ]; then
    print_error "This script should not be run as root for security reasons"
    exit 1
 fi
-
 # Check Ubuntu version
 if ! grep -q "Ubuntu" /etc/os-release; then
     print_error "This script is designed for Ubuntu. Other distributions may not work properly."
