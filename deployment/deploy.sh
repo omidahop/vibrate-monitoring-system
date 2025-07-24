@@ -40,9 +40,10 @@ print_error() {
 
 # Check if running as root
 if [ "$(whoami)" = "root" ]; then
-   print_error "This script should not be run as root for security reasons"
-   exit 1
+    print_error "This script should not be run as root for security reasons"
+    exit 1
 fi
+
 # Check Ubuntu version
 if ! grep -q "Ubuntu" /etc/os-release; then
     print_error "This script is designed for Ubuntu. Other distributions may not work properly."
@@ -69,14 +70,17 @@ sudo apt install -y \
     lsb-release \
     ufw \
     fail2ban \
-    htop
+    htop \
+    nginx \
+    bc \
+    mailutils
 
 # Install Docker
 print_status "Installing Docker..."
 if ! command -v docker &> /dev/null; then
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
-    sudo usermod -aG docker $USER
+    sudo usermod -aG docker "$USER"
     rm get-docker.sh
     print_success "Docker installed successfully"
 else
@@ -130,13 +134,15 @@ print_success "Fail2ban configured"
 # Create project directory
 print_status "Setting up project directory..."
 PROJECT_DIR="/home/$USER/$PROJECT_NAME"
-mkdir -p $PROJECT_DIR
-cd $PROJECT_DIR
+mkdir -p "$PROJECT_DIR"
+cd "$PROJECT_DIR"
 
 # Clone or update project
 if [ ! -d ".git" ]; then
     print_status "Cloning project repository..."
-    git clone https://github.com/yourusername/$PROJECT_NAME.git .
+    # Note: Replace with your actual repository URL
+    print_warning "Repository URL not specified. Please clone your project manually."
+    # git clone https://github.com/yourusername/$PROJECT_NAME.git .
 else
     print_status "Updating project repository..."
     git pull origin main
@@ -170,28 +176,36 @@ mkdir -p deployment/ssl
 mkdir -p frontend/public/icons
 
 # Set permissions
-sudo chown -R $USER:$USER $PROJECT_DIR
+sudo chown -R "$USER:$USER" "$PROJECT_DIR"
 chmod 600 .env
 
 # Generate PWA icons (placeholder)
 print_status "Setting up PWA icons..."
 # You would need to add your actual icons here
 for size in 72 96 128 144 152 192 384 512; do
-    touch frontend/public/icons/icon-${size}x${size}.png
+    touch "frontend/public/icons/icon-${size}x${size}.png"
 done
 
 # SSL Certificate setup with Let's Encrypt
-if [ "$DOMAIN" != "your-domain.com" ]; then
+if [ "$DOMAIN" != "your-domain.com" ] && ; then
+    print_warning "Using IP address instead of domain. SSL setup will be skipped."
+    print_warning "For SSL, please use a proper domain name."
+elif [ "$DOMAIN" != "your-domain.com" ]; then
     print_status "Setting up SSL certificate..."
     
     # Install certbot
     sudo apt install -y certbot python3-certbot-nginx
     
+    # Create web root directory
+    sudo mkdir -p /var/www/html
+    
     # Create temporary nginx config for domain verification
-    sudo tee /etc/nginx/sites-available/temp-$DOMAIN > /dev/null <<EOF
+    sudo tee /etc/nginx/sites-available/temp-"$DOMAIN" > /dev/null <<EOF
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
+    
+    root /var/www/html;
     
     location / {
         return 200 'OK';
@@ -200,21 +214,25 @@ server {
 }
 EOF
     
-    sudo ln -sf /etc/nginx/sites-available/temp-$DOMAIN /etc/nginx/sites-enabled/
+    sudo ln -sf /etc/nginx/sites-available/temp-"$DOMAIN" /etc/nginx/sites-enabled/
     sudo nginx -t && sudo systemctl reload nginx
     
     # Get SSL certificate
-    sudo certbot certonly --webroot -w /var/www/html -d $DOMAIN -d www.$DOMAIN --email $EMAIL --agree-tos --non-interactive
+    sudo certbot certonly --webroot -w /var/www/html -d "$DOMAIN" --email "$EMAIL" --agree-tos --non-interactive
     
-    # Copy certificates to project
-    sudo cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem deployment/ssl/
-    sudo cp /etc/letsencrypt/live/$DOMAIN/privkey.pem deployment/ssl/
-    sudo chown $USER:$USER deployment/ssl/*
-    
-    # Setup auto-renewal
-    echo "0 12 * * * /usr/bin/certbot renew --quiet && docker-compose restart nginx" | sudo crontab -
-    
-    print_success "SSL certificate configured"
+    if [ $? -eq 0 ]; then
+        # Copy certificates to project
+        sudo cp /etc/letsencrypt/live/"$DOMAIN"/fullchain.pem deployment/ssl/
+        sudo cp /etc/letsencrypt/live/"$DOMAIN"/privkey.pem deployment/ssl/
+        sudo chown "$USER:$USER" deployment/ssl/*
+        
+        # Setup auto-renewal
+        (sudo crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet && docker-compose restart nginx") | sudo crontab -
+        
+        print_success "SSL certificate configured"
+    else
+        print_warning "SSL certificate setup failed. Continuing without SSL."
+    fi
 else
     print_warning "Domain not configured, skipping SSL setup"
 fi
@@ -223,46 +241,52 @@ fi
 print_status "Building and starting services..."
 
 # Ensure user is in docker group
-if ! groups $USER | grep -q docker; then
+if ! groups "$USER" | grep -q docker; then
     print_status "Adding user to docker group..."
-    sudo usermod -aG docker $USER
-    print_warning "Please log out and log back in, then run: docker-compose up -d"
-    exit 0
+    sudo usermod -aG docker "$USER"
+    print_warning "User added to docker group. Please log out and log back in, then run: docker-compose up -d"
+    print_warning "Or run: newgrp docker && docker-compose up -d"
+    print_success "You can continue with the script by running: newgrp docker"
 fi
 
-# Build services
-docker-compose build --no-cache
-
-# Start services
-docker-compose up -d
-
-# Wait for services to be ready
-print_status "Waiting for services to start..."
-sleep 30
-
-# Check service health
-print_status "Checking service health..."
-for i in {1..30}; do
-    if docker-compose ps | grep -q "Up"; then
-        break
+# Check if docker-compose file exists
+if [ ! -f "docker-compose.yml" ]; then
+    print_error "docker-compose.yml not found. Please ensure your project repository is properly cloned."
+    print_warning "You can manually create docker-compose.yml or clone your repository."
+else
+    # Build services
+    docker-compose build --no-cache
+    
+    # Start services
+    docker-compose up -d
+    
+    # Wait for services to be ready
+    print_status "Waiting for services to start..."
+    sleep 30
+    
+    # Check service health
+    print_status "Checking service health..."
+    for i in {1..30}; do
+        if docker-compose ps | grep -q "Up"; then
+            break
+        fi
+        echo "Waiting for services... ($i/30)"
+        sleep 10
+    done
+    
+    # Verify services are running
+    if ! docker-compose ps | grep -q "Up"; then
+        print_error "Services failed to start properly"
+        print_status "Checking logs..."
+        docker-compose logs --tail=50
+    else
+        print_success "Services started successfully"
     fi
-    echo "Waiting for services... ($i/30)"
-    sleep 10
-done
-
-# Verify services are running
-if ! docker-compose ps | grep -q "Up"; then
-    print_error "Services failed to start properly"
-    print_status "Checking logs..."
-    docker-compose logs --tail=50
-    exit 1
 fi
-
-print_success "Services started successfully"
 
 # Setup log rotation
 print_status "Setting up log rotation..."
-sudo tee /etc/logrotate.d/$PROJECT_NAME > /dev/null <<EOF
+sudo tee /etc/logrotate.d/"$PROJECT_NAME" > /dev/null <<EOF
 $PROJECT_DIR/logs/*.log {
     daily
     missingok
@@ -279,31 +303,31 @@ EOF
 
 # Setup monitoring script
 print_status "Setting up monitoring..."
-cat > monitor.sh <<'EOF'
+cat > monitor.sh <<EOF
 #!/bin/bash
 
-PROJECT_DIR="/home/$(whoami)/vibrate-monitoring-system"
-cd $PROJECT_DIR
+PROJECT_DIR="/home/\$(whoami)/$PROJECT_NAME"
+cd "\$PROJECT_DIR"
 
 # Check if services are running
 if ! docker-compose ps | grep -q "Up"; then
-    echo "$(date): Services down, attempting restart..." >> logs/monitor.log
+    echo "\$(date): Services down, attempting restart..." >> logs/monitor.log
     docker-compose up -d
     
     # Send notification (you can customize this)
-    echo "Vibrate Monitor services restarted at $(date)" | mail -s "Service Restart" admin@your-domain.com 2>/dev/null || true
+    echo "Vibrate Monitor services restarted at \$(date)" | mail -s "Service Restart" $EMAIL 2>/dev/null || true
 fi
 
 # Check disk space
-DISK_USAGE=$(df / | grep -vE '^Filesystem|tmpfs|cdrom' | awk '{print $5}' | sed 's/%//g')
-if [ $DISK_USAGE -gt 85 ]; then
-    echo "$(date): Disk usage is ${DISK_USAGE}%" >> logs/monitor.log
+DISK_USAGE=\$(df / | grep -vE '^Filesystem|tmpfs|cdrom' | awk '{print \$5}' | sed 's/%//g')
+if [ "\$DISK_USAGE" -gt 85 ]; then
+    echo "\$(date): Disk usage is \${DISK_USAGE}%" >> logs/monitor.log
 fi
 
 # Check memory usage
-MEMORY_USAGE=$(free | grep Mem | awk '{printf("%.2f", $3/$2 * 100.0)}')
-if [ $(echo "${MEMORY_USAGE} > 85" | bc -l) ]; then
-    echo "$(date): Memory usage is ${MEMORY_USAGE}%" >> logs/monitor.log
+MEMORY_USAGE=\$(free | grep Mem | awk '{printf("%.2f", \$3/\$2 * 100.0)}')
+if [ \$(echo "\${MEMORY_USAGE} > 85" | bc -l) -eq 1 ]; then
+    echo "\$(date): Memory usage is \${MEMORY_USAGE}%" >> logs/monitor.log
 fi
 EOF
 
@@ -316,25 +340,28 @@ print_status "Setting up cron jobs..."
 
 # Setup backup script
 print_status "Setting up backup system..."
-cat > backup.sh <<'EOF'
+cat > backup.sh <<EOF
 #!/bin/bash
 
-BACKUP_DIR="/home/$(whoami)/backups"
-PROJECT_DIR="/home/$(whoami)/vibrate-monitoring-system"
-DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/home/\$(whoami)/backups"
+PROJECT_DIR="/home/\$(whoami)/$PROJECT_NAME"
+DATE=\$(date +%Y%m%d_%H%M%S)
 
-mkdir -p $BACKUP_DIR
+mkdir -p "\$BACKUP_DIR"
 
-# Backup CouchDB data
-docker exec vibrate_couchdb couchdb-backup -H localhost -p 5984 -u admin -P $COUCHDB_PASSWORD -d vibrate_backup_$DATE.tar.gz
+# Backup CouchDB data (if container exists)
+if docker ps | grep -q "couchdb"; then
+    docker exec \$(docker ps | grep couchdb | awk '{print \$1}') tar -czf /tmp/couchdb_backup_\$DATE.tar.gz /opt/couchdb/data 2>/dev/null || true
+    docker cp "\$(docker ps | grep couchdb | awk '{print \$1}'):/tmp/couchdb_backup_\$DATE.tar.gz" "\$BACKUP_DIR/" 2>/dev/null || true
+fi
 
 # Backup project files
-tar -czf $BACKUP_DIR/project_$DATE.tar.gz -C $PROJECT_DIR --exclude=node_modules --exclude=.git .
+tar -czf "\$BACKUP_DIR/project_\$DATE.tar.gz" -C "\$PROJECT_DIR" --exclude=node_modules --exclude=.git .
 
 # Keep only last 7 days of backups
-find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
+find "\$BACKUP_DIR" -name "*.tar.gz" -mtime +7 -delete
 
-echo "$(date): Backup completed" >> $PROJECT_DIR/logs/backup.log
+echo "\$(date): Backup completed" >> "\$PROJECT_DIR/logs/backup.log"
 EOF
 
 chmod +x backup.sh
@@ -367,13 +394,13 @@ sudo systemctl enable vibrate-monitor.service
 print_success "Systemd service created"
 
 # Setup nginx for production (if not using SSL from compose)
-if [ "$DOMAIN" != "your-domain.com" ]; then
+if [ "$DOMAIN" != "your-domain.com" ] && [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     print_status "Configuring production nginx..."
     
     # Remove temporary config
-    sudo rm -f /etc/nginx/sites-enabled/temp-$DOMAIN
+    sudo rm -f /etc/nginx/sites-enabled/temp-"$DOMAIN"
     
-    sudo tee /etc/nginx/sites-available/$PROJECT_NAME > /dev/null <<EOF
+    sudo tee /etc/nginx/sites-available/"$PROJECT_NAME" > /dev/null <<EOF
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
@@ -393,7 +420,15 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
 
     location / {
-        proxy_pass http://localhost:80;
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    location /api/ {
+        proxy_pass http://localhost:5000/api/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -402,7 +437,7 @@ server {
 }
 EOF
 
-    sudo ln -sf /etc/nginx/sites-available/$PROJECT_NAME /etc/nginx/sites-enabled/
+    sudo ln -sf /etc/nginx/sites-available/"$PROJECT_NAME" /etc/nginx/sites-enabled/
     sudo nginx -t && sudo systemctl reload nginx
 fi
 
@@ -448,21 +483,21 @@ print_status "Performing final health check..."
 sleep 10
 
 # Check if CouchDB is accessible
-if curl -f -s http://localhost:5984/_up > /dev/null; then
+if curl -f -s http://localhost:5984/_up > /dev/null 2>&1; then
     print_success "CouchDB is running"
 else
     print_warning "CouchDB health check failed"
 fi
 
 # Check if backend API is accessible
-if curl -f -s http://localhost:5000/api/health > /dev/null; then
+if curl -f -s http://localhost:5000/api/health > /dev/null 2>&1; then
     print_success "Backend API is running"
 else
     print_warning "Backend API health check failed"
 fi
 
 # Check if frontend is accessible
-if curl -f -s http://localhost/ > /dev/null; then
+if curl -f -s http://localhost:3000/ > /dev/null 2>&1; then
     print_success "Frontend is accessible"
 else
     print_warning "Frontend health check failed"
@@ -475,9 +510,14 @@ echo "🌐 Your Vibrate Monitoring System is now running!"
 echo
 print_status "Access Information:"
 if [ "$DOMAIN" != "your-domain.com" ]; then
-    echo "   🔗 URL: https://$DOMAIN"
+    if ; then
+        echo "   🔗 URL: http://$DOMAIN"
+    else
+        echo "   🔗 URL: https://$DOMAIN"
+    fi
 else
-    echo "   🔗 URL: http://$(curl -s ifconfig.me || echo 'YOUR_SERVER_IP')"
+    SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || echo 'YOUR_SERVER_IP')
+    echo "   🔗 URL: http://$SERVER_IP"
 fi
 echo "   👤 Super Admin Email: $EMAIL"
 echo "   🔑 Super Admin Password: $SUPER_ADMIN_PASSWORD"
@@ -502,7 +542,11 @@ echo
 print_status "Security Notes:"
 echo "   🔥 Firewall is active (UFW)"
 echo "   🛡️  Fail2ban is configured"
-echo "   🔒 SSL certificate is configured (if domain provided)"
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    echo "   🔒 SSL certificate is configured"
+else
+    echo "   ⚠️  SSL certificate not configured (using HTTP)"
+fi
 echo "   📦 Automatic security updates enabled"
 echo
 print_warning "IMPORTANT: Save the admin credentials shown above!"
@@ -540,14 +584,13 @@ Monitoring:
 Security:
 - Firewall (UFW) enabled
 - Fail2ban configured
-- SSL certificate configured
+- SSL certificate configured (if domain provided)
 - Automatic security updates enabled
 
 Health Check URLs:
-- Frontend: http://localhost/
+- Frontend: http://localhost:3000/
 - API Health: http://localhost:5000/api/health
 - CouchDB: http://localhost:5984/_utils
-
 EOF
 
 print_success "Deployment information saved to: $PROJECT_DIR/deployment-info.txt"
@@ -558,7 +601,7 @@ print_status "Next Steps:"
 echo "1. 📝 Save the admin credentials from above"
 echo "2. 🌐 Visit your application URL"
 echo "3. 🔑 Login with super admin credentials"
-echo "4. 👥 Create additional users as needed" 
+echo "4. 👥 Create additional users as needed"
 echo "5. 📊 Test the data entry functionality"
 echo "6. 🔧 Configure any additional settings"
 echo
